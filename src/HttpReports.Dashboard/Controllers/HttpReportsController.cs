@@ -66,6 +66,13 @@ namespace HttpReports.Dashboard.Controllers
             return View();
         }
 
+        public IActionResult Trace(string Id)
+        {
+            ViewBag.TraceId = Id;
+
+            return View();
+        }
+
         public async Task<IActionResult> RequestInfoDetail(string Id = "")
         {
             var (requestInfo, requestDetail) = await _storage.GetRequestInfoDetail(Id); 

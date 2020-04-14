@@ -29,12 +29,15 @@ namespace HttpReports
                 return (null,null);
             }  
 
-            // 创建请求信息
+            // Build RequestInfo 
             var request = ModelCreator.CreateRequestInfo();
             request.IP = context.Connection.RemoteIpAddress.ToString();
+            request.Port = context.Connection.RemotePort;
+            request.LocalIP = context.Connection.LocalIpAddress.ToString();
+            request.LocalPort = context.Connection.LocalPort;
             request.StatusCode = context.Response.StatusCode;
             request.Method = context.Request.Method;
-            request.Url = context.Request.Path;
+            request.Url = context.Request.Path; 
             request.Milliseconds = ToInt32(stopwatch.ElapsedMilliseconds);
             request.CreateTime = DateTime.Now;
 
@@ -116,7 +119,7 @@ namespace HttpReports
             {
                 return -1;
             }
-            return (int)value;
+            return (int)value == 0 ? 1:(int)value;
         }
 
       

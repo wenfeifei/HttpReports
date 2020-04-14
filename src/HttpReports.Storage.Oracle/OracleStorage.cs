@@ -53,13 +53,17 @@ namespace HttpReports.Storage.Oracle
                             create table RequestInfo
                             (
 	                            Id varchar2(50),
+                                ParentId varchar2(50),
 	                            Node varchar2(50),
 	                            Route varchar2(50),
 	                            Url varchar2(200),
 	                            Method varchar2(50),
-	                            Milliseconds NUMBER(15),
-	                            StatusCode NUMBER(15),
-	                            IP varchar2(50),
+	                            Milliseconds number(15),
+	                            StatusCode number(15),
+	                            IP varchar2(50), 
+                                Port number(15),
+                                LocalIP varchar2(50),
+                                LocalPort number(15), 
 	                            CreateTime date
                             )
 
@@ -150,7 +154,7 @@ namespace HttpReports.Storage.Oracle
 
                 foreach (var request in list.Select(x=>x.Key))
                 {
-                    sb.AppendLine($@"Insert Into RequestInfo Values ('{request.Id}','{request.Node}','{request.Route}','{request.Url}','{request.Method}',{request.Milliseconds},{request.StatusCode},'{request.IP}',to_date('{request.CreateTime.ToString("yyyy-MM-dd HH:mm:ss")}','yyyy-mm-dd hh24:mi:ss'));  " );
+                    sb.AppendLine($@"Insert Into RequestInfo Values ('{request.Id}','{request.ParentId}','{request.Node}','{request.Route}','{request.Url}','{request.Method}',{request.Milliseconds},{request.StatusCode},'{request.IP}',{request.Port},'{request.LocalIP}',{request.LocalPort},to_date('{request.CreateTime.ToString("yyyy-MM-dd HH:mm:ss")}','yyyy-mm-dd hh24:mi:ss')); ");
                 }
 
                 foreach (var detail in list.Select(x => x.Value))
@@ -175,7 +179,7 @@ namespace HttpReports.Storage.Oracle
             {
                 await LoggingSqlOperation(async connection =>
                 {
-                    string requestSql = $@"Insert Into RequestInfo Values ('{request.Id}','{request.Node}','{request.Route}','{request.Url}','{request.Method}',{request.Milliseconds},{request.StatusCode},'{request.IP}',to_date('{request.CreateTime.ToString("yyyy-MM-dd HH:mm:ss")}','yyyy-mm-dd hh24:mi:ss'))";
+                    string requestSql = $@"Insert Into RequestInfo Values ('{request.Id}','{request.ParentId}','{request.Node}','{request.Route}','{request.Url}','{request.Method}',{request.Milliseconds},{request.StatusCode},'{request.IP}',{request.Port},'{request.LocalIP}',{request.LocalPort},to_date('{request.CreateTime.ToString("yyyy-MM-dd HH:mm:ss")}','yyyy-mm-dd hh24:mi:ss')) ";
 
                     await connection.ExecuteAsync(requestSql).ConfigureAwait(false);
 
@@ -797,6 +801,49 @@ namespace HttpReports.Storage.Oracle
            )).ConfigureAwait(false);
 
             return (requestInfo, requestDetail);
+        }
+
+        public async Task<IRequestInfo> GetRequestInfo(string Id)
+        {
+            string sql = $" Select * From RequestInfo Where Id = '{Id}'";
+
+            TraceLogSql(sql);
+
+            var requestInfo = await LoggingSqlOperation(async connection => (
+
+             await connection.QueryFirstOrDefaultAsync<RequestInfo>(sql, new { Id }).ConfigureAwait(false)
+
+           )).ConfigureAwait(false);
+
+            return requestInfo;
+        }
+
+        public async Task<List<IRequestInfo>> GetRequestInfoByParentId(string ParentId)
+        {
+            string sql = $" Select * From RequestInfo Where ParentId = '{ParentId}' Order By CreateTime ";
+
+            TraceLogSql(sql);
+
+            var requestInfo = await LoggingSqlOperation(async connection => (
+
+             await connection.QueryAsync<RequestInfo>(sql).ConfigureAwait(false)
+
+           )).ConfigureAwait(false);
+
+            return requestInfo.Select(x => x as IRequestInfo).ToList();
+        }
+
+        public async Task ClearData(string StartTime)
+        {
+            string sql = $"Delete From RequestInfo Where CreateTime <= to_date('{StartTime}','YYYY-MM-DD') ";
+
+            TraceLogSql(sql);
+
+            var result = await LoggingSqlOperation(async connection => (
+
+             await connection.ExecuteAsync(sql).ConfigureAwait(false)
+
+           )).ConfigureAwait(false);
         }
     }
 }
