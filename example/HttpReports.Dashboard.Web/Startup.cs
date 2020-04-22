@@ -22,14 +22,18 @@ namespace HttpReports.Dashboard.Web
        
         public void ConfigureServices(IServiceCollection services)
         {
-            services.AddHttpReportsDashborad().UseMySqlStorage();
+            services.AddHttpReports().UseSQLServerStorage().UseGrpc(); 
 
+            services.AddHttpReportsDashborad().UseSQLServerStorage();
+           
             services.AddControllersWithViews();
         }
 
    
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
         {
+            app.UseHttpReports();
+
             app.UseHttpReportsDashboard();
 
             if (env.IsDevelopment())

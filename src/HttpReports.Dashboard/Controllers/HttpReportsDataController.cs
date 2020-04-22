@@ -25,9 +25,7 @@ namespace HttpReports.Dashboard.Controllers
 
         private readonly MonitorService _monitorService;
 
-        private readonly ScheduleService _scheduleService;
-
-        private static readonly IReadOnlyList<int> Hours = new List<int> { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23 };
+        private readonly ScheduleService _scheduleService; 
 
         public HttpReportsDataController(IHttpReportsStorage storage, MonitorService monitorService, ScheduleService scheduleService)
         {
@@ -36,7 +34,7 @@ namespace HttpReports.Dashboard.Controllers
             _scheduleService = scheduleService;
         }
 
-        public async Task<IActionResult> GetIndexChartA(GetIndexDataRequest request)
+        public async Task<IActionResult> GetIndexChartData(GetIndexDataRequest request)
         {
             var start = (request.Start.IsEmpty() ? DateTime.Now.ToString("yyyy-MM-dd") : request.Start).ToDateTime();
             var end = (request.End.IsEmpty() ? DateTime.Now.AddDays(1).ToString("yyyy-MM-dd") : request.End).ToDateTime();
@@ -50,6 +48,8 @@ namespace HttpReports.Dashboard.Controllers
                 EndTime = end,
                 IsAscend = false,
                 Take = request.TOP,
+                StartTimeFormat = "yyyy-MM-dd HH:mm:ss",
+                EndTimeFormat = "yyyy-MM-dd HH:mm:ss" 
             }).ConfigureAwait(false);
 
             var topError500 = await _storage.GetUrlRequestStatisticsAsync(new RequestInfoFilterOption()
@@ -60,6 +60,8 @@ namespace HttpReports.Dashboard.Controllers
                 IsAscend = false,
                 Take = request.TOP,
                 StatusCodes = new[] { 500 },
+                StartTimeFormat = "yyyy-MM-dd HH:mm:ss",
+                EndTimeFormat = "yyyy-MM-dd HH:mm:ss"
             }).ConfigureAwait(false);
 
             var fast = await _storage.GetRequestAvgResponeTimeStatisticsAsync(new RequestInfoFilterOption()
@@ -69,6 +71,8 @@ namespace HttpReports.Dashboard.Controllers
                 EndTime = end,
                 IsAscend = true,
                 Take = request.TOP,
+                StartTimeFormat = "yyyy-MM-dd HH:mm:ss",
+                EndTimeFormat = "yyyy-MM-dd HH:mm:ss"
             }).ConfigureAwait(false);
 
             var slow = await _storage.GetRequestAvgResponeTimeStatisticsAsync(new RequestInfoFilterOption()
@@ -78,6 +82,9 @@ namespace HttpReports.Dashboard.Controllers
                 EndTime = end,
                 IsAscend = false,
                 Take = request.TOP,
+                StartTimeFormat = "yyyy-MM-dd HH:mm:ss",
+                EndTimeFormat = "yyyy-MM-dd HH:mm:ss"
+
             }).ConfigureAwait(false);
 
             var Art = new
@@ -92,6 +99,8 @@ namespace HttpReports.Dashboard.Controllers
                 StartTime = start,
                 EndTime = end,
                 StatusCodes = new[] { 200, 301, 302, 303, 400, 401, 403, 404, 500, 502, 503 },
+                StartTimeFormat = "yyyy-MM-dd HH:mm:ss",
+                EndTimeFormat = "yyyy-MM-dd HH:mm:ss"
             }).ConfigureAwait(false)).Where(m => true).Select(m => new EchartPineDataModel(m.Code.ToString(), m.Total)).ToArray();
 
             var ResponseTime = (await _storage.GetGroupedResponeTimeStatisticsAsync(new GroupResponeTimeFilterOption()
@@ -99,6 +108,8 @@ namespace HttpReports.Dashboard.Controllers
                 Nodes = nodes,
                 StartTime = start,
                 EndTime = end,
+                StartTimeFormat = "yyyy-MM-dd HH:mm:ss",
+                EndTimeFormat = "yyyy-MM-dd HH:mm:ss"
             }).ConfigureAwait(false)).Where(m => true).Select(m => new EchartPineDataModel(m.Name, m.Total)).ToArray();
 
             return Json(new HttpResultEntity(1, "ok", new { StatusCode, ResponseTime, topRequest, topError500, Art }));
@@ -106,9 +117,8 @@ namespace HttpReports.Dashboard.Controllers
 
         public async Task<IActionResult> GetDayStateBar(GetIndexDataRequest request)
         {
-            var startTime = request.Day.ToDateTimeOrNow().Date;
-            var endTime = startTime.AddDays(1);
-
+            var startTime = new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, DateTime.Now.Hour, 0, 0, DateTimeKind.Local).AddDays(-1);
+            var endTime = DateTime.Now; 
 
             var nodes = request.Node.IsEmpty() ? null : request.Node.Split(',');
 
@@ -117,6 +127,8 @@ namespace HttpReports.Dashboard.Controllers
             {
                 StartTime = startTime,
                 EndTime = endTime,
+                StartTimeFormat = "yyyy-MM-dd HH:mm:ss",
+                EndTimeFormat = "yyyy-MM-dd HH:mm:ss",
                 Nodes = nodes,
                 Type = TimeUnit.Hour,
             }).ConfigureAwait(false);
@@ -126,6 +138,8 @@ namespace HttpReports.Dashboard.Controllers
             {
                 StartTime = startTime,
                 EndTime = endTime,
+                StartTimeFormat = "yyyy-MM-dd HH:mm:ss",
+                EndTimeFormat = "yyyy-MM-dd HH:mm:ss",
                 Nodes = nodes,
                 Type = TimeUnit.Hour,
             }).ConfigureAwait(false);
@@ -133,30 +147,97 @@ namespace HttpReports.Dashboard.Controllers
             List<int> timesList = new List<int>();
             List<int> avgList = new List<int>();
 
-            foreach (var item in Hours)
-            {
-                // 每小时请求次数
-                var times = requestTimesStatistics.Items.TryGetValue(item.ToString(), out var tTimes) ? tTimes : 0;
-                //每小时平均处理时间
-                var avg = responseTimeStatistics.Items.TryGetValue(item.ToString(), out var tAvg) ? tAvg : 0;
+            List<int> hours = new List<int>(); 
 
+            for (int i = 1; i <= 24 ; i++)
+            {
+                var start = startTime.AddHours(i).ToString("dd-HH"); 
+
+                // 每小时请求次数
+                var times = requestTimesStatistics.Items.TryGetValue(start,out var tTimes) ? tTimes : 0;
                 timesList.Add(times);
+
+
+                //每小时平均处理时间
+                var avg = responseTimeStatistics.Items.TryGetValue(start, out var tAvg) ? tAvg : 0;
                 avgList.Add(avg);
+
+
+                hours.Add(startTime.AddHours(i).ToString("HH").ToInt());
+
+            }  
+
+            return Json(new HttpResultEntity(1, "ok", new { timesList, avgList, hours }));
+        }
+
+        public async Task<IActionResult> GetMinuteStateBar(GetIndexDataRequest request)
+        {
+            var startTime = DateTime.Now.AddHours(-1).AddSeconds(-DateTime.Now.Second);
+           
+            var endTime = DateTime.Now;
+
+            var nodes = request.Node.IsEmpty() ? null : request.Node.Split(',');
+
+            // 每小时请求次数
+            var requestTimesStatistics = await _storage.GetRequestTimesStatisticsAsync(new TimeSpanStatisticsFilterOption()
+            {
+                StartTime = startTime,
+                EndTime = endTime,
+                StartTimeFormat = "yyyy-MM-dd HH:mm:ss",
+                EndTimeFormat = "yyyy-MM-dd HH:mm:ss",
+                Nodes = nodes,
+                Type = TimeUnit.Minute,
+            }).ConfigureAwait(false);
+
+            //每小时平均处理时间
+            var responseTimeStatistics = await _storage.GetResponseTimeStatisticsAsync(new TimeSpanStatisticsFilterOption()
+            {
+                StartTime = startTime,
+                EndTime = endTime,
+                StartTimeFormat = "yyyy-MM-dd HH:mm:ss",
+                EndTimeFormat = "yyyy-MM-dd HH:mm:ss",
+                Nodes = nodes,
+                Type = TimeUnit.Minute,
+            }).ConfigureAwait(false);
+
+            List<int> timesList = new List<int>();
+            List<int> avgList = new List<int>();
+
+            List<int> time = new List<int>();
+
+            for (int i = 1; i <= 60; i++)
+            {
+                var start = startTime.AddMinutes(i).ToString("HH-mm");
+
+                // 每小时请求次数
+                var times = requestTimesStatistics.Items.TryGetValue(start, out var tTimes) ? tTimes : 0;
+                timesList.Add(times);
+
+
+                //每小时平均处理时间
+                var avg = responseTimeStatistics.Items.TryGetValue(start, out var tAvg) ? tAvg : 0;
+                avgList.Add(avg);
+
+
+                time.Add(startTime.AddMinutes(i).ToString("mm").ToInt());
+
             }
 
-            return Json(new HttpResultEntity(1, "ok", new { timesList, avgList, Hours }));
+            return Json(new HttpResultEntity(1, "ok", new { timesList, avgList, time }));
         }
 
         public async Task<IActionResult> GetLatelyDayChart(GetIndexDataRequest request)
         {
-            var startTime = $"{request.Month}-01".ToDateTimeOrDefault(() => new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1));
-            var endTime = startTime.AddMonths(1);
+            var startTime = DateTime.Now.Date.AddDays(-31);
+            var endTime = DateTime.Now.Date.AddDays(1).AddSeconds(-1);
             var nodes = request.Node.IsEmpty() ? null : request.Node.Split(',');
 
             var responseTimeStatistics = await _storage.GetRequestTimesStatisticsAsync(new TimeSpanStatisticsFilterOption()
             {
                 StartTime = startTime,
                 EndTime = endTime,
+                StartTimeFormat = "yyyy-MM-dd HH:mm:ss",
+                EndTimeFormat = "yyyy-MM-dd HH:mm:ss",
                 Nodes = nodes,
                 Type = TimeUnit.Day,
             }).ConfigureAwait(false);
@@ -164,20 +245,19 @@ namespace HttpReports.Dashboard.Controllers
             List<string> time = new List<string>();
             List<int> value = new List<int>();
 
-            string Range = $"{startTime.ToString("yyyy-MM-dd")}-{endTime.AddDays(-1).ToString("yyyy-MM-dd")}";
 
             var monthDayCount = (endTime - startTime).Days;
-            for (int i = 0; i < monthDayCount; i++)
+            for (int i = 1; i <= monthDayCount; i++)
             {
-                var day = (i + 1).ToString();
+                var day = startTime.AddDays(i).ToString("yyyy-MM-dd");
 
                 var times = responseTimeStatistics.Items.TryGetValue(day, out var tTimes) ? tTimes : 0;
 
-                time.Add(string.Format("{0:00}", i + 1));
-                value.Add(times);
-            }
+                time.Add(startTime.AddDays(i).ToString("dd").ToInt().ToString());
+                value.Add(times); 
+            }  
 
-            return Json(new HttpResultEntity(1, "ok", new { time, value, Range }));
+            return Json(new HttpResultEntity(1, "ok", new { time, value }));
         }
 
         public async Task<IActionResult> GetMonthDataByYear(GetIndexDataRequest request)
@@ -318,14 +398,16 @@ namespace HttpReports.Dashboard.Controllers
 
         public async Task<IActionResult> GetIndexData(GetIndexDataRequest request)
         {
-            var start = (request.Start.IsEmpty() ? DateTime.Now.ToString("yyyy-MM-dd") : request.Start).ToDateTime();
-            var end = (request.End.IsEmpty() ? DateTime.Now.AddDays(1).ToString("yyyy-MM-dd") : request.End).ToDateTime();
+            var start = request.Start.ToDateTime();
+            var end = request.End.ToDateTime();
 
             var result = await _storage.GetIndexPageDataAsync(new IndexPageDataFilterOption()
             {
                 Nodes = request.Node.IsEmpty() ? null : request.Node.Split(','),
                 StartTime = start,
                 EndTime = end,
+                StartTimeFormat= "yyyy-MM-dd HH:mm:ss",
+                EndTimeFormat = "yyyy-MM-dd HH:mm:ss"
             }).ConfigureAwait(false);
 
             return Json(new HttpResultEntity(1, "ok", new
@@ -340,14 +422,7 @@ namespace HttpReports.Dashboard.Controllers
         }
 
         public async Task<IActionResult> GetRequestList(GetRequestListRequest request)
-        {
-            if (request.Start.IsEmpty() && request.End.IsEmpty())
-            {
-                request.Start = DateTime.Now.ToString("yyyy-MM-dd");
-
-                request.End = DateTime.Now.AddDays(1).ToString("yyyy-MM-dd");
-            }
-
+        {  
             var result = await _storage.SearchRequestInfoAsync(new RequestInfoSearchFilterOption()
             {
                 Nodes = request.Node.IsEmpty() ? null : request.Node.Split(','),
@@ -360,6 +435,9 @@ namespace HttpReports.Dashboard.Controllers
                 IsOrderByField = true,
                 Field = RequestInfoFields.CreateTime,
                 IsAscend = false,
+                StartTimeFormat = "yyyy-MM-dd HH:mm:ss",
+                EndTimeFormat = "yyyy-MM-dd HH:mm:ss"
+
             }).ConfigureAwait(false);
 
             return Json(new { total = result.AllItemCount, rows = result.List });
@@ -537,7 +615,8 @@ namespace HttpReports.Dashboard.Controllers
                  Node = requestInfo.Node,
                  Url = requestInfo.Url,
                  Milliseconds = requestInfo.Milliseconds,
-                 StatusCode = requestInfo.StatusCode
+                 StatusCode = requestInfo.StatusCode,
+                 RequestType = requestInfo.RequestType
 
             }; 
 

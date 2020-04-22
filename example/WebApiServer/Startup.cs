@@ -23,11 +23,18 @@ namespace WebApiServer
 
         
         public void ConfigureServices(IServiceCollection services)
-        {
-            services.AddControllers();
+        { 
+            services.AddHttpReports(options => { 
+                
+                options.Node = "UserService";  
+            
+            }).UseSQLServerStorage(options => { 
 
-            services.AddHttpReports().UseMySqlStorage();  
+                options.ConnectionString = "DataBase=HttpReports;Data Source=localhost;User Id=root;Password=123456;";
+            
+            });
 
+            services.AddControllers(); 
         }
 
          
