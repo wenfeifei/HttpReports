@@ -32,6 +32,8 @@ namespace HttpReports
         /// <returns></returns>
         Task<List<NodeInfo>> GetNodesAsync();
 
+        Task<List<ServiceInstanceInfo>> GetServiceInstance(DateTime startTime); 
+
         #region Statistics
 
         /// <summary>
@@ -144,7 +146,11 @@ namespace HttpReports
 
         Task<List<IRequestInfo>> GetRequestInfoByParentId(string ParentId);
 
-        Task ClearData(string StartTime);  
+        Task ClearData(string StartTime);
+
+        Task SetLanguage(string Language);
+
+        Task<string> GetSysConfig(string Key); 
 
     }
 }

@@ -2,14 +2,14 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
-using System.Threading.Tasks;
+using System.Threading.Tasks; 
 using Microsoft.AspNetCore.Mvc;
 
 namespace HttpReports.Dashboard.Web.Controllers
 {
     [Route("api/[controller]/[action]")]
     public class TestController : Controller
-    { 
+    {  
 
         [HttpGet]
         public async Task<IActionResult> Index()
@@ -92,7 +92,6 @@ namespace HttpReports.Dashboard.Web.Controllers
             return await Task.FromResult(Ok(new { code = 1,message = "ok"})); 
 
         } 
-
 
     }
 }

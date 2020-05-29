@@ -19,14 +19,17 @@ namespace HttpReports
 
         public IHttpInvokeProcesser InvokeProcesser { get; }
 
+        private HttpReportsOptions Options { get; }
+
         public ILogger<DefaultHttpReportsMiddleware> Logger { get; }
 
-        public DefaultHttpReportsMiddleware(RequestDelegate next, IRequestInfoBuilder requestInfoBuilder, IHttpInvokeProcesser invokeProcesser, ILogger<DefaultHttpReportsMiddleware> logger)
+        public DefaultHttpReportsMiddleware(RequestDelegate next, IOptions<HttpReportsOptions> options, IRequestInfoBuilder requestInfoBuilder, IHttpInvokeProcesser invokeProcesser, ILogger<DefaultHttpReportsMiddleware> logger)
         {
             _next = next;
             Logger = logger;
             RequestInfoBuilder = requestInfoBuilder;
             InvokeProcesser = invokeProcesser;
+            Options = options.Value;
         }
 
         public async Task InvokeAsync(HttpContext context)
@@ -35,27 +38,26 @@ namespace HttpReports
             {
                 await _next(context);
                 return;
-            } 
+            }
 
-
-            if (context.Request.ContentType == "application/grpc")
+            if (!context.Request.ContentType.IsEmpty() && context.Request.ContentType.Contains("application/grpc"))
             {
                 await InvokeGrpcAsync(context);
             }
             else
             {
-               await InvokeHttpAsync(context);
-            } 
+                await InvokeHttpAsync(context);
+            }
         }
 
 
         private async Task InvokeHttpAsync(HttpContext context)
         {
-            if (context.Request.Method.ToUpper() == "OPTIONS")
+            if (FilterRequest(context))
             {
                 await _next(context);
                 return;
-            }
+            } 
 
             var stopwatch = Stopwatch.StartNew();
             stopwatch.Start();
@@ -84,7 +86,7 @@ namespace HttpReports
                 context.Items.Add(BasicConfig.HttpReportsRequestBody, requestBody);
                 context.Items.Add(BasicConfig.HttpReportsResponseBody, responseBody);
 
-                await responseMemoryStream.CopyToAsync(originalBodyStream); 
+                await responseMemoryStream.CopyToAsync(originalBodyStream);
 
                 responseMemoryStream.Dispose();
 
@@ -98,14 +100,14 @@ namespace HttpReports
         }
 
         private async Task InvokeGrpcAsync(HttpContext context)
-        { 
+        {
             var stopwatch = Stopwatch.StartNew();
             stopwatch.Start();
 
-            ConfigTrace(context); 
+            ConfigTrace(context);
 
             try
-            { 
+            {
                 await _next(context);
 
             }
@@ -118,55 +120,77 @@ namespace HttpReports
 
                 if (context.Items.ContainsKey(BasicConfig.HttpReportsGrpcRequest))
                 {
-                    requestBody = JsonConvert.SerializeObject(context.Items[BasicConfig.HttpReportsGrpcRequest]); 
+                    requestBody = JsonConvert.SerializeObject(context.Items[BasicConfig.HttpReportsGrpcRequest]);
                 }
 
                 if (context.Items.ContainsKey(BasicConfig.HttpReportsGrpcResponse))
                 {
                     responseBody = JsonConvert.SerializeObject(context.Items[BasicConfig.HttpReportsGrpcResponse]);
-                } 
+                }
 
                 context.Items.Add(BasicConfig.HttpReportsRequestBody, requestBody);
-                context.Items.Add(BasicConfig.HttpReportsResponseBody,responseBody); 
+                context.Items.Add(BasicConfig.HttpReportsResponseBody, responseBody);
 
                 if (!string.IsNullOrEmpty(context.Request.Path))
                 {
                     InvokeProcesser.Process(context, stopwatch);
-                } 
-            } 
-        } 
+                }
+            }
+        }
 
 
         private async Task<string> GetRequestBodyAsync(HttpContext context)
         {
-            string result = string.Empty;
+            try
+            {
+                string result = string.Empty;
 
-            context.Request.EnableBuffering();
+                context.Request.EnableBuffering();
 
-            var requestReader = new StreamReader(context.Request.Body);
+                var requestReader = new StreamReader(context.Request.Body,System.Text.Encoding.UTF8);
 
-            result = await requestReader.ReadToEndAsync();
+                result = await requestReader.ReadToEndAsync();
 
-            context.Request.Body.Position = 0;
+                context.Request.Body.Position = 0;
 
-            return result;
-
+                return result;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex.ToString());
+                return string.Empty;
+            }
         }
 
         private async Task<string> GetResponseBodyAsync(HttpContext context)
         {
-            string result = string.Empty;
+            try
+            {
+                if (FilterStaticFiles(context))
+                {
+                    context.Response.Body.Seek(0, SeekOrigin.Begin);
+                    return string.Empty;
+                } 
+                
 
-            context.Response.Body.Seek(0, SeekOrigin.Begin);
+                string result = string.Empty;
 
-            var responseReader = new StreamReader(context.Response.Body);
+                context.Response.Body.Seek(0, SeekOrigin.Begin);
 
-            result = await responseReader.ReadToEndAsync();
+                var responseReader = new StreamReader(context.Response.Body, System.Text.Encoding.UTF8);
 
-            context.Response.Body.Seek(0, SeekOrigin.Begin);
+                result = await responseReader.ReadToEndAsync();
 
-            return result;
+                context.Response.Body.Seek(0, SeekOrigin.Begin);
 
+                return result;
+
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex.ToString());
+                return string.Empty;
+            }
         }
 
         private void ConfigTrace(HttpContext context)
@@ -177,6 +201,7 @@ namespace HttpReports
                 activity.Start();
                 activity.AddBaggage(BasicConfig.ActiveTraceId, activity.Id);
                 context.Items.Add(BasicConfig.ActiveTraceCreateTime, DateTime.Now);
+                context.Response.Headers.Add(BasicConfig.ActiveTraceId, activity.SpanId.ToString());
                 return;
             }
 
@@ -189,6 +214,7 @@ namespace HttpReports
                 activity.Start();
                 activity.AddBaggage(BasicConfig.ActiveTraceId, activity.Id);
                 context.Items.Add(BasicConfig.ActiveTraceCreateTime, DateTime.Now);
+                context.Response.Headers.Add(BasicConfig.ActiveTraceId, activity.SpanId.ToString());
             }
             else
             {
@@ -197,7 +223,76 @@ namespace HttpReports
                 activity.Start();
                 activity.AddBaggage(BasicConfig.ActiveTraceId, activity.Id);
                 context.Items.Add(BasicConfig.ActiveTraceCreateTime, DateTime.Now);
+                context.Response.Headers.Add(BasicConfig.ActiveTraceId, activity.SpanId.ToString());
             }
         }
+
+        private bool FilterStaticFiles(HttpContext context)
+        { 
+            if (!context.Request.ContentType.IsEmpty() && context.Request.ContentType.Contains("application/grpc"))
+                return false;
+
+            if (context.Request.Method.ToLowerInvariant() == "options")
+                return true;
+
+            if (context.Request.Path.HasValue && context.Request.Path.Value.Contains("."))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool FilterRequest(HttpContext context)
+        {
+            if (Options.FilterRequest == null || Options.FilterRequest.Count() == 0)
+            {
+                return false;
+            }
+
+            var path = context.Request.Path.Value.ToLowerInvariant(); 
+
+            return MatchRequestRule();
+
+            bool MatchRequestRule()
+            {
+                bool result = false;
+
+                foreach (var item in Options.FilterRequest)
+                {
+                    var rule = item.ToLowerInvariant();
+
+                    if (rule.Select(x => x == '%').Count() == 0)
+                    {
+                        continue;
+                    }
+                    else if (rule.Select(x => x == '%').Count() >= 2)
+                    {
+                        if (path.Contains(rule.Replace("%", "")))
+                        {
+                            return true;
+                        }
+                    }
+                    else if (rule.Select(x => x == '%').Count() == 1 && rule.LastOrDefault() == '%')
+                    {
+                        if (path.StartsWith(rule.Replace("%", "")))
+                        {
+                            return true;
+                        }
+                    }
+
+                    else if (rule.Select(x => x == '%').Count() == 1 && rule.FirstOrDefault() == '%')
+                    {
+                        if (path.EndsWith(rule.Replace("%", "")))
+                        {
+                            return true;
+                        }
+                    }
+                }
+
+                return result;
+            }
+        } 
+      
     }
 }

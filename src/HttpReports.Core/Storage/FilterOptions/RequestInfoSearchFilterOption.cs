@@ -22,7 +22,9 @@ namespace HttpReports.Storage.FilterOptions
         public string StartTimeFormat { get; set; } = "yyyy-MM-dd";
         public string EndTimeFormat { get; set; } = "yyyy-MM-dd";
         public bool IsOrderByField { get; set; } = true;
- 
+
+        public string TraceId { get; set; }
+
         public string IP { get; set; }
 
        
@@ -47,6 +49,10 @@ namespace HttpReports.Storage.FilterOptions
                 ReSetTake();
             }
         }
+
+        public string Service { get; set; }
+        public string LocalIP { get; set; }
+        public int LocalPort { get; set; }
 
         /// <summary>
         /// 重新设置take的信息
